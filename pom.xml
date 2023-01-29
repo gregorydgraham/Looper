@@ -33,7 +33,6 @@
 		<url>https://github.com/gregorydgraham/Looper</url>
 		<connection>scm:git:https://github.com/gregorydgraham/Looper</connection>
 		<developerConnection>scm:git:https://github.com/gregorydgraham/Looper</developerConnection>
-		<tag>looper-0.6</tag>
 	</scm>
 	
 	<dependencies>
@@ -153,5 +152,48 @@
 			</build>
 		</profile>
 	</profiles>
+	
+	<build>
+		<plugins>
+			<plugin>
+				<!-- 
+					With the SCM connection configured correctly you can perform a release deployment to OSSRH with
+				
+					"mvn release:clean release:prepare"
+					
+					then answering the prompts for versions and tags, followed by
+				
+					"mvn release:perform"
+				-->
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-release-plugin</artifactId>
+				<version>2.5.3</version>
+				<configuration>
+					<autoVersionSubmodules>true</autoVersionSubmodules>
+					<!-- sonatype prefer their own release profile -->
+					<useReleaseProfile>false</useReleaseProfile>
+					<!-- release profile as defined by Sonatype -->
+					<releaseProfiles>release</releaseProfiles>
+					<goals>deploy</goals>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<version>3.3.1</version> 
+				<configuration>
+					<additionalOptions>-html5</additionalOptions>
+				</configuration>
+				<executions>
+					<execution>
+						<id>attach-javadocs</id>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
 
 </project>
