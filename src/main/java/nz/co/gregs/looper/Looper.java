@@ -46,6 +46,14 @@ public class Looper implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
+	private final LoopVariable state = new LoopVariable();
+	
+	private Exception exception = null;
+	private Function<Integer, Exception> action;
+	private Function<Integer, Boolean> test;
+	private Consumer<Integer> successfulCompletionAction;
+	private Consumer<Integer> unsuccessfulCompletionAction;
+
 	private Looper() {
 	}
 
@@ -60,8 +68,6 @@ public class Looper implements Serializable {
 		newLoop.setInfiniteLoopPermitted();
 		return newLoop;
 	}
-
-	private transient final State state = new State();
 
 	public static Looper factory() {
 		return new Looper();
@@ -84,67 +90,8 @@ public class Looper implements Serializable {
 	 *
 	 * @return true if the loop is still needed.
 	 */
-	public boolean isNeeded() {
-		if (state.limitMaxAttempts) {
-			return state.needed && attempts() + 1 <= state.maxAttemptsAllowed;
-		} else {
-			return state.needed;
-		}
-	}
-
-	/**
-	 * Checks the whether the loop is still needed (that is {@link #done()} has
-	 * not been called) and if the loop has exceeded the maximum attempts (if a
-	 * max is defined).
-	 *
-	 * @return true if the loop is no longer needed.
-	 */
-	public boolean isNotNeeded() {
-		return !isNeeded();
-	}
-
-	/**
-	 * Synonym for {@link #isNotNeeded() }.
-	 *
-	 * @return true if the loop is no longer needed.
-	 */
-	public boolean hasHappened() {
-		return isNotNeeded();
-	}
-
-	/**
-	 * Synonym for {@link #isNeeded() }.
-	 *
-	 * @return true if the loop is still needed.
-	 */
-	public boolean hasNotHappened() {
-		return isNeeded();
-	}
-
-	/**
-	 * Informs the LoopVariable that the loop has been successful and is no longer
-	 * needed.
-	 * <p>
-	 * This method is used to indicate that a loop that takes multiple attempts to
-	 * complete one task, has successfully completed that task.</p>
-	 */
-	private void done() {
-		state.needed = false;
-	}
-
-	/**
-	 * Indicates that an attempt has been started.
-	 *
-	 * <p>
-	 * This method is used to indicate that a loop that takes multiple attempts to
-	 * complete one task, has started an attempt to complete that task. Each cvall
-	 * of {@link #attempt() } counts towards the
-	 * {@link #setMaxAttemptsAllowed(int) maximum attempts} if a maximum has been
-	 * set.</p>
-	 *
-	 */
-	private void attempt() {
-		state.increaseTries();
+	private boolean isNeeded() {
+		return state.isNeeded();
 	}
 
 	/**
@@ -153,7 +100,7 @@ public class Looper implements Serializable {
 	 * @return the number of attempts started.
 	 */
 	public int attempts() {
-		return state.getTries();
+		return state.attempts();
 	}
 
 	public Duration elapsedTime() {
@@ -176,10 +123,7 @@ public class Looper implements Serializable {
 	 * @return this object with the configuration changed
 	 */
 	public Looper setMaxAttemptsAllowed(int maxAttemptsAllowed) {
-		if (maxAttemptsAllowed > 0) {
-			state.limitMaxAttempts = true;
-			state.maxAttemptsAllowed = maxAttemptsAllowed;
-		}
+		state.setMaxAttemptsAllowed(maxAttemptsAllowed);
 		return this;
 	}
 
@@ -197,7 +141,7 @@ public class Looper implements Serializable {
 	 * @return this object with the configuration changed
 	 */
 	public Looper setInfiniteLoopPermitted() {
-		state.limitMaxAttempts = false;
+		state.setInfiniteLoopPermitted();
 		return this;
 	}
 
@@ -212,7 +156,7 @@ public class Looper implements Serializable {
 		};
 	}
 
-	public void loop(Supplier<Void> action) {
+	public void loop(Supplier<Exception> action) {
 		Consumer<Integer> function = (index) -> action.get();
 		loop(function, returnFalse());
 	}
@@ -245,10 +189,10 @@ public class Looper implements Serializable {
 	 * @param test the test to check, if TRUE the loop will be terminated, if
 	 * FALSE the loop will continue
 	 */
-	public void loop(Supplier<Void> action, Supplier<Boolean> test) {
+	public void loop(Supplier<Exception> action, Supplier<Boolean> test) {
 		Consumer<Integer> function = (index) -> action.get();
 		Function<Integer, Boolean> testFunction = (index) -> test.get();
-		loop(function, testFunction, doNothingOnCompletion(), doNothingOnCompletion());
+		loop(function, testFunction);
 	}
 
 	/**
@@ -274,7 +218,7 @@ public class Looper implements Serializable {
 	 * @param action the action to perform with a loop
 	 */
 	public void loop(Consumer<Integer> action) {
-		loop(action, returnFalse(), doNothingOnCompletion(), doNothingOnCompletion());
+		loop(action, returnFalse());
 	}
 
 	/**
@@ -448,10 +392,15 @@ public class Looper implements Serializable {
 	 * loop if the test fails after completion
 	 */
 	public void loop(Consumer<Integer> action, Function<Integer, Boolean> test, Consumer<Integer> successfulCompletion, Consumer<Integer> unsuccessfulCompletion) {
-		Exception loopWithExceptionHandling = loopWithExceptionHandling((Integer index) -> {
-			action.accept(index);
-			return null;
-		}, test, successfulCompletion, unsuccessfulCompletion);
+		loopWithExceptionHandling(
+						(Integer index) -> {
+							action.accept(index);
+							return null;
+						},
+						test,
+						successfulCompletion,
+						unsuccessfulCompletion
+				);
 	}
 
 	/**
@@ -497,133 +446,103 @@ public class Looper implements Serializable {
 	 * loop if the test is true after completion
 	 * @param unsuccessfulCompletion the action to perform immediately after the
 	 * loop if the test fails after completion
+	 * @return 
 	 */
 	public Exception loopWithExceptionHandling(Function<Integer, Exception> action, Function<Integer, Boolean> test, Consumer<Integer> successfulCompletion, Consumer<Integer> unsuccessfulCompletion) {
-		state.setAction(action);
-		state.setTest(test);
-		state.setSuccessfulCompletionAction(successfulCompletion);
-		state.setUnsuccessfulCompletionAction(unsuccessfulCompletion);
+		setAction(action);
+		setTest(test);
+		setSuccessfulCompletionAction(successfulCompletion);
+		setUnsuccessfulCompletionAction(unsuccessfulCompletion);
 		Boolean testSuccessful = false;
 		state.startTimer();
 		while (isNeeded()) {
-			attempt();
-			Exception exc = action.apply(getIndex());
-			state.setException(exc);
-			if (state.hasException()) {
-				return state.getException();
+			state.attempt();
+			Exception exc = getAction().apply(getSuccessfulLoops());
+			setException(exc);
+			if (hasException()) {
+				state.stopTimer();
+				return getException();
 			}
-			testSuccessful = test.apply(getIndex());
+			testSuccessful = getTest().apply(getSuccessfulLoops());
 			if (testSuccessful) {
-				done();
+				state.done();
 			}
 			increaseIndex();
 		}
 		if (testSuccessful) {
-			successfulCompletion.accept(getIndex());
+			getSuccessfulCompletionAction().accept(getSuccessfulLoops());
 		} else {
-			unsuccessfulCompletion.accept(getIndex());
+			getUnsuccessfulCompletionAction().accept(getSuccessfulLoops());
 		}
 		state.stopTimer();
 		return null;
 	}
 
-	public int getIndex() {
-		return state.index();
+	public int getSuccessfulLoops() {
+		return state.getSuccessfulLoops();
 	}
 
 	private void increaseIndex() {
-		state.increaseIndex();
+		state.incrementSuccessLoops();
 	}
 
-	public static class State {
+	public boolean hasException() {
+		return exception != null;
+	}
 
-		private int tries;
-		private int index;
-		private boolean needed;
-		private int maxAttemptsAllowed;
-		private boolean limitMaxAttempts;
-		private Exception exception = null;
-		private Instant startTime;
-		private Instant endTime;
-		private Function<Integer, Exception> action;
-		private Function<Integer, Boolean> test;
-		private Consumer<Integer> successfulCompletionAction;
-		private Consumer<Integer> unsuccessfulCompletionAction;
+	public Exception getException() {
+		return exception;
+	}
 
-		private State() {
-			reset();
-		}
-		
-		private void startTimer(){
-			startTime = Instant.now();
-		}
+	public void setException(Exception exc) {
+		exception = exc;
+	}
 
-		private void stopTimer(){
-			endTime = Instant.now();
-		}
+	private void setAction(Function<Integer, Exception> action) {
+		this.action = action;
+	}
 
-		public void increaseTries() {
-			tries++;
-		}
+	private void setTest(Function<Integer, Boolean> test) {
+		this.test = test;
+	}
 
-		public int getTries() {
-			return tries;
-		}
+	private void setSuccessfulCompletionAction(Consumer<Integer> successfulCompletion) {
+		this.successfulCompletionAction = successfulCompletion;
+	}
 
-		public Instant getStartTime() {
-			return startTime;
-		}
+	private void setUnsuccessfulCompletionAction(Consumer<Integer> unsuccessfulCompletion) {
+		this.unsuccessfulCompletionAction = unsuccessfulCompletion;
+	}
 
-		public Duration elapsedTime() {
-			Duration duration = Duration.between(getStartTime(), Instant.now());
-			return duration;
-		}
+	public Function<Integer, Exception> getAction() {
+		return action;
+	}
 
-		public int index() {
-			return index;
-		}
+	public Function<Integer, Boolean> getTest() {
+		return test;
+	}
 
-		public void increaseIndex() {
-			index++;
-		}
+	public Consumer<Integer> getSuccessfulCompletionAction() {
+		return successfulCompletionAction;
+	}
 
-		public boolean hasException() {
-			return exception != null;
-		}
+	private Consumer<Integer> getUnsuccessfulCompletionAction() {
+		return unsuccessfulCompletionAction;
+	}
 
-		public Exception getException() {
-			return exception;
-		}
+	public Boolean isLimited() {
+		return state.isLimited();
+	}
 
-		public void setException(Exception exc) {
-			exception = exc;
-		}
-
-		private void setAction(Function<Integer, Exception> action) {
-			this.action = action;
-		}
-
-		private void setTest(Function<Integer, Boolean> test) {
-			this.test = test;
-		}
-
-		private void setSuccessfulCompletionAction(Consumer<Integer> successfulCompletion) {
-			this.successfulCompletionAction = successfulCompletion;
-		}
-
-		private void setUnsuccessfulCompletionAction(Consumer<Integer> unsuccessfulCompletion) {
-			this.unsuccessfulCompletionAction = unsuccessfulCompletion;
-		}
-
-		private void reset() {
-			tries = 0;
-			index = 0;
-			needed = true;
-			maxAttemptsAllowed = 1000;
-			limitMaxAttempts = true;
-			exception = null;
-			startTime = null;
-			endTime = null;
-		}
+	public Boolean isInfiniteLoopsPermitted() {
+		return !state.isLimited();
+	}
+	
+	public Instant getStartTime(){
+		return state.getStartTime();
+	}
+	
+	public Instant getEndTime(){
+		return state.getEndTime();
 	}
 }
