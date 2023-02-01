@@ -32,14 +32,10 @@ package nz.co.gregs.looper;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.TemporalUnit;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
-import org.hamcrest.Matcher;
 import org.junit.Test;
 import static org.hamcrest.Matchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
 
 /**
  *
