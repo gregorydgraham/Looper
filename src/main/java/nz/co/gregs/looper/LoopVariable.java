@@ -35,7 +35,8 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * Implements a while/for loop combination.
+ * Implements the variables need for a while/for loop combination with start and
+ * end times, counting of loop attempts and successes, and more.
  *
  * @author gregorygraham
  */
@@ -50,7 +51,6 @@ public class LoopVariable implements Serializable {
 	private Instant startTime = Instant.now();
 	private Instant endTime = null;
 	private int successfulLoops = 0;
-	
 
 	public static LoopVariable withMaxAttempts(int size) {
 		LoopVariable newLoop = LoopVariable.factory();
@@ -197,18 +197,30 @@ public class LoopVariable implements Serializable {
 	}
 
 	/**
+	 * Returns the time recorded at the start of the loop
 	 *
-	 * @return
+	 * @return the time that the loop was initiated
 	 */
 	public Instant getStartTime() {
 		return startTime;
 	}
 
+	/**
+	 * Returns the time recorded at the end of the loop
+	 *
+	 * @return the time that the loop was finished
+	 */
 	public Duration elapsedTime() {
 		Duration duration = Duration.between(getStartTime(), getEndTime());
 		return duration;
 	}
 
+	/**
+	 * Resets all the loop variables to their default settings so the loop can be
+	 * re-run
+	 *
+	 * Max attempts is not reset.
+	 */
 	public void reset() {
 		tries = 0;
 		needed = true;
@@ -216,10 +228,23 @@ public class LoopVariable implements Serializable {
 		endTime = null;
 	}
 
+	/**
+	 * Returns TRUE if the loop will stop after a maximum number of attempts
+	 *
+	 * @return return true is the number of loop attempts is limited
+	 */
 	protected boolean isLimited() {
 		return limitMaxAttempts;
 	}
 
+	/**
+	 * the number of times the loop will be attempted
+	 *
+	 * <p>
+	 * Maybe zero (0) if the loop is set to allow infinite loops</p>
+	 *
+	 * @return the maximum number of loops
+	 */
 	protected int maxAttemptsAllowed() {
 		return maxAttemptsAllowed;
 	}
@@ -232,14 +257,33 @@ public class LoopVariable implements Serializable {
 		endTime = Instant.now();
 	}
 
+	/**
+	 * Similar to {@link #attempts() }, this reports the number of loops that have
+	 * been successfully completed.
+	 *
+	 * <p>
+	 * Attempts should be incremented at the start of a loop and successfulLoops
+	 * should be incremented at the end, so attempts and successfulLoops may not
+	 * be the same.
+	 *
+	 * @return the number of successful loops
+	 */
 	int getSuccessfulLoops() {
 		return successfulLoops;
 	}
 
+	/**
+	 * increments the successful loop counter
+	 */
 	void incrementSuccessLoops() {
 		successfulLoops++;
 	}
 
+	/**
+	 * Returns the end time of the loop
+	 *
+	 * @return and instant recorded at the end of the loop
+	 */
 	public Instant getEndTime() {
 		return endTime;
 	}

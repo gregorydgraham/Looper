@@ -40,6 +40,10 @@ import java.util.function.Consumer;
 /**
  * Implements a while/for loop combination.
  *
+ * <p>
+ * Looper attempts to use functional interfaces to implement an improved looping
+ * system.
+ *
  * @author gregorygraham
  */
 public class Looper implements Serializable {
@@ -47,7 +51,7 @@ public class Looper implements Serializable {
 	private static final long serialVersionUID = 1L;
 
 	private final LoopVariable state = new LoopVariable();
-	
+
 	private Exception exception = null;
 	private Function<Integer, Exception> action;
 	private Function<Integer, Boolean> test;
@@ -95,7 +99,10 @@ public class Looper implements Serializable {
 	}
 
 	/**
-	 * The number of attempts recorded using {@link #attempt() }.
+	 * The number of loops started.
+	 *
+	 * This may be different from the number of loops successfully completed, use {@link #getSuccessfulLoops()
+	 * } to for that.
 	 *
 	 * @return the number of attempts started.
 	 */
@@ -111,12 +118,7 @@ public class Looper implements Serializable {
 	 * Sets the maximum attempts allowed for this loop variable.
 	 *
 	 * <p>
-	 * Maximum attempts will stop a correctly used Looper after the maximum
-	 * attempts by changing {@link #isNeeded() } to false</p>
-	 *
-	 * <p>
-	 * Attempts are registered by calling {@link #attempt() } at the start of each
-	 * loop.</p>
+	 * Maximum attempts will stop looping after trying this many times</p>
 	 *
 	 * @param maxAttemptsAllowed the number of attempts after which the loop will
 	 * abort.
@@ -131,8 +133,8 @@ public class Looper implements Serializable {
 	 * Removes the default limit from the LoopVariable.
 	 *
 	 * <p>
-	 * By default {@link #isNeeded() } will return false after 1000 attempts. Use
-	 * this method to remove the limit and permit infinite loops.</p>
+	 * By default the loop will terminate after 1000 attempts. Use this method to
+	 * remove the limit and permit infinite loops.</p>
 	 *
 	 * <p>
 	 * Alternatively you can seta higher, or lower, limit with {@link #setMaxAttemptsAllowed(int)
@@ -393,14 +395,14 @@ public class Looper implements Serializable {
 	 */
 	public void loop(Consumer<Integer> action, Function<Integer, Boolean> test, Consumer<Integer> successfulCompletion, Consumer<Integer> unsuccessfulCompletion) {
 		loopWithExceptionHandling(
-						(Integer index) -> {
-							action.accept(index);
-							return null;
-						},
-						test,
-						successfulCompletion,
-						unsuccessfulCompletion
-				);
+				(Integer index) -> {
+					action.accept(index);
+					return null;
+				},
+				test,
+				successfulCompletion,
+				unsuccessfulCompletion
+		);
 	}
 
 	/**
@@ -446,7 +448,7 @@ public class Looper implements Serializable {
 	 * loop if the test is true after completion
 	 * @param unsuccessfulCompletion the action to perform immediately after the
 	 * loop if the test fails after completion
-	 * @return 
+	 * @return the exception returned from the action function
 	 */
 	public Exception loopWithExceptionHandling(Function<Integer, Exception> action, Function<Integer, Boolean> test, Consumer<Integer> successfulCompletion, Consumer<Integer> unsuccessfulCompletion) {
 		setAction(action);
@@ -537,12 +539,12 @@ public class Looper implements Serializable {
 	public Boolean isInfiniteLoopsPermitted() {
 		return !state.isLimited();
 	}
-	
-	public Instant getStartTime(){
+
+	public Instant getStartTime() {
 		return state.getStartTime();
 	}
-	
-	public Instant getEndTime(){
+
+	public Instant getEndTime() {
 		return state.getEndTime();
 	}
 }
