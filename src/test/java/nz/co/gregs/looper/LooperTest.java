@@ -32,7 +32,7 @@ package nz.co.gregs.looper;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.function.Supplier;
+import java.util.function.Consumer;
 import org.junit.Test;
 import static org.hamcrest.Matchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -47,12 +47,43 @@ public class LooperTest {
 	}
 
 	@Test
-	public void testLooperHasDefaultValues() {
-		Looper looper = Looper.factory();
+	public void testLoopUntilSuccessHasDefaultValues() {
+		Looper looper = Looper.loopUntilSuccess();
 		assertThat(looper.attempts(), is(0));
 		assertThat(looper.getSuccessfulLoops(), is(0));
-		assertThat(looper.hasException(), is(false));
-		assertThat(looper.getException(), nullValue());
+		assertThat(looper.isInfiniteLoopsPermitted(), is(true));
+		assertThat(looper.isLimited(), is(false));
+		assertThat(looper.getEndTime(), nullValue());
+		assertThat(looper.getStartTime(), greaterThan(Instant.now().minusSeconds(10)));
+	}
+
+	@Test
+	public void testLoopUntilSuccessOrLimitHasDefaultValues() {
+		Looper looper = Looper.loopUntilSuccessOrLimit();
+		assertThat(looper.attempts(), is(0));
+		assertThat(looper.getSuccessfulLoops(), is(0));
+		assertThat(looper.isInfiniteLoopsPermitted(), is(false));
+		assertThat(looper.isLimited(), is(true));
+		assertThat(looper.getEndTime(), nullValue());
+		assertThat(looper.getStartTime(), greaterThan(Instant.now().minusSeconds(10)));
+	}
+
+	@Test
+	public void testLoopUntilFailureHasDefaultValues() {
+		Looper looper = Looper.loopUntilFailure();
+		assertThat(looper.attempts(), is(0));
+		assertThat(looper.getSuccessfulLoops(), is(0));
+		assertThat(looper.isInfiniteLoopsPermitted(), is(true));
+		assertThat(looper.isLimited(), is(false));
+		assertThat(looper.getEndTime(), nullValue());
+		assertThat(looper.getStartTime(), greaterThan(Instant.now().minusSeconds(10)));
+	}
+
+	@Test
+	public void testLoopUntilFailureOrLimitHasDefaultValues() {
+		Looper looper = Looper.loopUntilFailureOrLimit();
+		assertThat(looper.attempts(), is(0));
+		assertThat(looper.getSuccessfulLoops(), is(0));
 		assertThat(looper.isInfiniteLoopsPermitted(), is(false));
 		assertThat(looper.isLimited(), is(true));
 		assertThat(looper.getEndTime(), nullValue());
@@ -61,49 +92,11 @@ public class LooperTest {
 
 	@Test
 	public void testLoopChangesDefaultValues() {
-		Looper looper = Looper.factory(1);
+		Looper looper = Looper.loopUntilSuccessOrLimit(1);
 		looper.loop((index) -> {;
 		});
 		assertThat(looper.attempts(), is(1));
 		assertThat(looper.getSuccessfulLoops(), is(1));
-		assertThat(looper.hasException(), is(false));
-		assertThat(looper.getException(), nullValue());
-		assertThat(looper.isInfiniteLoopsPermitted(), is(false));
-		assertThat(looper.isLimited(), is(true));
-		assertThat(looper.getEndTime(), greaterThan(Instant.now().minusSeconds(10)));
-		assertThat(looper.getStartTime(), greaterThan(Instant.now().minusSeconds(20)));
-		assertThat(looper.elapsedTime(), greaterThan(Duration.ZERO));
-	}
-
-	@Test
-	public void testLoopWithExceptionsChangesDefaultValues() {
-		Looper looper = Looper.factory(1);
-		Exception exc = looper.loopWithExceptionHandling((index) -> {
-			return null;
-		});
-		assertThat(looper.attempts(), is(1));
-		assertThat(looper.getSuccessfulLoops(), is(1));
-		assertThat(looper.hasException(), is(false));
-		assertThat(looper.getException(), nullValue());
-		assertThat(looper.isInfiniteLoopsPermitted(), is(false));
-		assertThat(looper.isLimited(), is(true));
-		assertThat(looper.getEndTime(), greaterThan(Instant.now().minusSeconds(10)));
-		assertThat(looper.getStartTime(), greaterThan(Instant.now().minusSeconds(20)));
-		assertThat(looper.elapsedTime(), greaterThan(Duration.ZERO));
-	}
-
-	@Test
-	public void testLoopWithExceptionsThrowingExceptionChangesDefaultValues() {
-		Looper looper = Looper.factory(1);
-		Exception exc = looper.loopWithExceptionHandling((index) -> {
-			return new Exception();
-		});
-		String message = exc.getMessage();
-		assertThat(looper.attempts(), is(1));
-		assertThat(looper.getSuccessfulLoops(), is(0));
-		assertThat(looper.hasException(), is(true));
-		assertThat(looper.getException(), is(exc));
-		assertThat(looper.getException().getMessage(), is(message));
 		assertThat(looper.isInfiniteLoopsPermitted(), is(false));
 		assertThat(looper.isLimited(), is(true));
 		assertThat(looper.getEndTime(), greaterThan(Instant.now().minusSeconds(10)));
@@ -115,7 +108,7 @@ public class LooperTest {
 	public void testLoopReachesIntendedMax() {
 		final int intendedAttempts = 10;
 
-		Looper looper = Looper.factory(intendedAttempts);
+		Looper looper = Looper.loopUntilSuccessOrLimit(intendedAttempts);
 		assertThat(looper.attempts(), is(0));
 
 		looper.loop((index)
@@ -125,43 +118,11 @@ public class LooperTest {
 	}
 
 	@Test
-	public void testLoopWithExceptionHandlingReachesIntendedMax() {
-		final int intendedAttempts = 10;
-
-		Looper looper = Looper.factory(intendedAttempts);
-
-		Exception exc
-				= looper.loopWithExceptionHandling((index) -> {
-					System.out.println("testLoop: attempt " + looper.attempts());
-					return null;
-				}
-				);
-		assertThat(looper.attempts(), is(intendedAttempts));
-		assertThat(exc, nullValue());
-	}
-
-	@Test
 	public void testLoopDefaultStopsAt1000Attempts() {
-		Looper looper = Looper.factory();
+		Looper looper = Looper.loopUntilSuccessOrLimit();
 		assertThat(looper.attempts(), is(0));
 
-		looper.loop((index) -> {
-			// do your processing
-			// here
-		});
-		assertThat(looper.attempts(), is(1000));
-	}
-
-	@Test
-	public void testLoopWithExceptionDefaultStopsAt1000Attempts() {
-		Looper looper = Looper.factory();
-		assertThat(looper.attempts(), is(0));
-
-		looper.loopWithExceptionHandling((index) -> {
-			// do your processing
-			// here
-			return null;
-		});
+		looper.loop((index) -> {});
 		assertThat(looper.attempts(), is(1000));
 	}
 
@@ -169,15 +130,9 @@ public class LooperTest {
 	public void testLoopWithSupplierAction() {
 		final int intendedAttempts = 10;
 		// Create the Looper
-		Looper looper = Looper.factory(intendedAttempts);
+		Looper looper = Looper.loopUntilSuccessOrLimit(intendedAttempts);
 		// Create the method to loop over
-		final Supplier<Exception> action = () -> {
-			// do your processing
-			// here
-
-			// return null as required by the Java spec
-			return null;
-		};
+		final Consumer<LoopVariable> action = (state) -> {};
 		// loop over the action
 		looper.loop(action);
 		assertThat(looper.attempts(), is(intendedAttempts));
@@ -186,36 +141,49 @@ public class LooperTest {
 	@Test
 	public void testLoopWithTest() {
 		final int intendedAttempts = 10;
-		Looper looper = Looper.factory(intendedAttempts * 2);
+		Looper looper = Looper
+				.loopUntilSuccessOrLimit(intendedAttempts * 2)
+				.withStopOnSuccess(true);
 		looper.loop(
-				() -> {
-					return null;
-				},
-				() -> {
-					return looper.attempts() >= intendedAttempts;
-				}
+				(state) -> {},
+				(state) -> {return state.attempts() >= intendedAttempts;}
 		);
 		assertThat(looper.attempts(), is(intendedAttempts));
 	}
 
 	@Test
+	public void testLoopWithTestButDontStopOnSuccess() {
+		final int intendedAttempts = 10;
+		Looper looper = Looper
+				.loopUntilSuccessOrLimit(intendedAttempts * 2)
+				.withStopOnSuccess(false);
+		looper.loop(
+				(state) -> {;
+				},
+				(state) -> {
+					return state.attempts() >= intendedAttempts;
+				}
+		);
+		assertThat(looper.attempts(), is(intendedAttempts * 2));
+	}
+
+	@Test
 	public void testReloopingWithoutReset() {
 		final int intendedAttempts = 10;
-		Looper looper = Looper.factory(intendedAttempts * 2);
+		Looper looper = Looper.loopUntilSuccessOrLimit(intendedAttempts * 2);
 		looper.loop(
-				() -> {
-					return null;
+				(state) -> {
 				},
-				() -> {
-					return looper.attempts() >= intendedAttempts;
+				(state) -> {
+					return state.attempts() >= intendedAttempts;
 				}
 		);
 		assertThat(looper.attempts(), is(intendedAttempts));
 		looper.loop(
-				(index) -> {
+				(state) -> {
 					System.out.println("YOU SHOULD NOT SEE THIS");
 				},
-				(index) -> {
+				(state) -> {
 					return looper.attempts() >= intendedAttempts;
 				});
 		assertThat(looper.attempts(), is(intendedAttempts));
@@ -224,12 +192,10 @@ public class LooperTest {
 	@Test
 	public void testReloopingWithReset() {
 		final int intendedAttempts = 10;
-		Looper looper = Looper.factory(intendedAttempts * 2);
+		Looper looper = Looper.loopUntilSuccessOrLimit(intendedAttempts * 2);
 		looper.loop(
-				() -> {
-					return null;
-				},
-				() -> {
+				(state) -> {				},
+				(state) -> {
 					return looper.attempts() >= intendedAttempts;
 				}
 		);
@@ -248,10 +214,8 @@ public class LooperTest {
 
 	@Test
 	public void testLoopStoppedByExceedingMaxAttemptsAllowed() {
-		Looper looper = Looper.factory(20);
-		looper.loop(() -> {
-			return null;
-		});
+		Looper looper = Looper.loopUntilSuccessOrLimit(20);
+		looper.loop((state) -> {	});
 		assertThat(looper.attempts(), is(20));
 	}
 }
