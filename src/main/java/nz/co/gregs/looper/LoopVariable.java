@@ -33,6 +33,8 @@ package nz.co.gregs.looper;
 import java.io.Serializable;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * Implements the variables need for a while/for loop combination with start and
@@ -50,7 +52,32 @@ public class LoopVariable implements Serializable {
 	private int tries = 0;
 	private Instant startTime = Instant.now();
 	private Instant endTime = null;
-	private int successfulLoops = 0;
+	private int index = 0;
+	private boolean allTestsSuccessful = true;
+	private boolean someTestSuccessful = false;
+	private boolean allTestsFailed = true;
+	private boolean someTestFailed = false;
+	ArrayList<Boolean> testResults = new ArrayList<Boolean>(0);
+	HashMap<Integer, Boolean> successfulTests = new HashMap<Integer, Boolean>(0);
+	HashMap<Integer, Boolean> failedTests = new HashMap<Integer, Boolean>(0);
+
+	LoopVariable copy() {
+		LoopVariable result = new LoopVariable();
+		result.needed = needed;
+		result.maxAttemptsAllowed = maxAttemptsAllowed;
+		result.limitMaxAttempts = limitMaxAttempts;
+		result.tries = tries;
+		result.startTime = startTime;
+		result.endTime = endTime;
+		result.index = index;
+		result.allTestsSuccessful = allTestsSuccessful;
+		result.someTestSuccessful = someTestSuccessful;
+		result.allTestsFailed = allTestsFailed;
+		result.someTestFailed = someTestFailed;
+		result.testResults.addAll(testResults);
+
+		return result;
+	}
 
 	public static LoopVariable withMaxAttempts(int size) {
 		LoopVariable newLoop = LoopVariable.factory();
@@ -249,11 +276,11 @@ public class LoopVariable implements Serializable {
 		return maxAttemptsAllowed;
 	}
 
-	public void startTimer() {
+	protected void setStartTime() {
 		startTime = Instant.now();
 	}
 
-	public void stopTimer() {
+	protected void setEndTime() {
 		endTime = Instant.now();
 	}
 
@@ -268,15 +295,15 @@ public class LoopVariable implements Serializable {
 	 *
 	 * @return the number of successful loops
 	 */
-	int getSuccessfulLoops() {
-		return successfulLoops;
+	public int getIndex() {
+		return index;
 	}
 
 	/**
 	 * increments the successful loop counter
 	 */
-	void incrementSuccessLoops() {
-		successfulLoops++;
+	protected void incrementIndex() {
+		index++;
 	}
 
 	/**
@@ -286,5 +313,46 @@ public class LoopVariable implements Serializable {
 	 */
 	public Instant getEndTime() {
 		return endTime;
+	}
+
+	void addTestResult(Boolean testSuccessful) {
+		allTestsSuccessful &= testSuccessful;
+		someTestSuccessful |= testSuccessful;
+		allTestsFailed &= !testSuccessful;
+		someTestFailed |= !testSuccessful;
+		testResults.add(this.index, testSuccessful);
+		if (testSuccessful) {
+			successfulTests.put(this.index, testSuccessful);
+		} else {
+			failedTests.put(this.index, testSuccessful);
+		}
+	}
+
+	/**
+	 * @return the allTestSuccessful
+	 */
+	public boolean isAllTestsSuccessful() {
+		return allTestsSuccessful;
+	}
+
+	/**
+	 * @return the anyTestSuccessful
+	 */
+	public boolean isSomeTestsSuccessful() {
+		return someTestSuccessful;
+	}
+
+	/**
+	 * @return the allTestFailed
+	 */
+	public boolean isAllTestsFailed() {
+		return allTestsFailed;
+	}
+
+	/**
+	 * @return the anyTestFailed
+	 */
+	public boolean isSomeTestsFailed() {
+		return someTestFailed;
 	}
 }
