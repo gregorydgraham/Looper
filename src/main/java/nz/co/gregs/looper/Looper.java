@@ -34,7 +34,6 @@ import java.io.Serializable;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.function.Consumer;
 
 /**
@@ -50,41 +49,90 @@ public class Looper implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
-	private final LoopVariable state = new LoopVariable();
+	private final LoopVariable currentState = new LoopVariable();
 
-	private Exception exception = null;
-	private Function<Integer, Exception> action;
-	private Function<Integer, Boolean> test;
-	private Consumer<Integer> successfulCompletionAction;
-	private Consumer<Integer> unsuccessfulCompletionAction;
+	private Consumer<LoopVariable> action = doNothing();
+	private Function<LoopVariable, Boolean> test = returnFalse();
+	private Boolean stopOnSuccess = true;
+	private Boolean stopOnFailure = false;
+	private Consumer<LoopVariable> allTestsSuccessfulAction;
+	private Consumer<LoopVariable> someTestsSuccessfulAction;
+	private Consumer<LoopVariable> allTestsFailedAction;
+	private Consumer<LoopVariable> someTestsFailedAction;
+	private Consumer<LoopVariable> successfulTestAction = doNothing();
+	private Consumer<LoopVariable> failedTestAction = doNothing();
 
 	private Looper() {
 	}
 
-	public static Looper withMaxAttempts(int size) {
-		Looper newLoop = Looper.factory();
-		newLoop.setMaxAttemptsAllowed(size);
+	public static Looper loopUntilSuccess() {
+		Looper newLoop
+				= Looper.factory()
+						.withStopOnSuccess(true)
+						.withStopOnFailure(false)
+						.withInfiniteLoopPermitted();
 		return newLoop;
 	}
 
-	public static Looper withInfiniteLoopsPermitted() {
-		Looper newLoop = Looper.factory();
-		newLoop.setInfiniteLoopPermitted();
+	public static Looper loopUntilLimit(int limit) {
+		Looper newLoop
+				= Looper.factory()
+						.withStopOnSuccess(false)
+						.withStopOnFailure(false)
+						.withMaxAttemptsAllowed(limit);
 		return newLoop;
 	}
 
-	public static Looper factory() {
+	public static Looper loopUntilSuccessOrLimit() {
+		Looper result = loopUntilSuccess()
+				.withMaxAttemptsAllowed(1000);
+		return result;
+	}
+
+	public static Looper loopUntilSuccessOrLimit(int limit) {
+		Looper result = loopUntilSuccess()
+				.withMaxAttemptsAllowed(limit);
+		return result;
+	}
+
+	public static Looper loopUntilFailure() {
+		Looper newLoop
+				= Looper.factory()
+						.withStopOnSuccess(false)
+						.withStopOnFailure(true)
+						.withInfiniteLoopPermitted();
+		return newLoop;
+	}
+
+	public static Looper loopUntilFailureOrLimit(int limit) {
+		Looper result = loopUntilFailure()
+				.withMaxAttemptsAllowed(limit);
+		return result;
+	}
+
+	public static Looper loopUntilFailureOrLimit() {
+		Looper result = loopUntilFailure()
+				.withMaxAttemptsAllowed(1000);
+		return result;
+	}
+
+	private static Looper factory() {
 		return new Looper();
 	}
 
-	public static Looper factory(int max) {
-		Looper loopVariable = new Looper();
-		loopVariable.setMaxAttemptsAllowed(max);
-		return loopVariable;
+	private static Consumer<LoopVariable> doNothing() {
+		return (index) -> {
+		};
+	}
+
+	private static Function<LoopVariable, Boolean> returnFalse() {
+		return (d) -> {
+			return false;
+		};
 	}
 
 	public void reset() {
-		state.reset();
+		currentState.reset();
 	}
 
 	/**
@@ -95,7 +143,7 @@ public class Looper implements Serializable {
 	 * @return true if the loop is still needed.
 	 */
 	private boolean isNeeded() {
-		return state.isNeeded();
+		return currentState.isNeeded();
 	}
 
 	/**
@@ -107,11 +155,11 @@ public class Looper implements Serializable {
 	 * @return the number of attempts started.
 	 */
 	public int attempts() {
-		return state.attempts();
+		return currentState.attempts();
 	}
 
 	public Duration elapsedTime() {
-		return state.elapsedTime();
+		return currentState.elapsedTime();
 	}
 
 	/**
@@ -124,8 +172,8 @@ public class Looper implements Serializable {
 	 * abort.
 	 * @return this object with the configuration changed
 	 */
-	public Looper setMaxAttemptsAllowed(int maxAttemptsAllowed) {
-		state.setMaxAttemptsAllowed(maxAttemptsAllowed);
+	public Looper withMaxAttemptsAllowed(int maxAttemptsAllowed) {
+		currentState.setMaxAttemptsAllowed(maxAttemptsAllowed);
 		return this;
 	}
 
@@ -137,64 +185,24 @@ public class Looper implements Serializable {
 	 * remove the limit and permit infinite loops.</p>
 	 *
 	 * <p>
-	 * Alternatively you can seta higher, or lower, limit with {@link #setMaxAttemptsAllowed(int)
+	 * Alternatively you can seta higher, or lower, limit with {@link #withMaxAttemptsAllowed(int)
 	 * }.</p>
 	 *
 	 * @return this object with the configuration changed
 	 */
-	public Looper setInfiniteLoopPermitted() {
-		state.setInfiniteLoopPermitted();
+	public Looper withInfiniteLoopPermitted() {
+		currentState.setInfiniteLoopPermitted();
 		return this;
 	}
 
-	private static Consumer<Integer> doNothingOnCompletion() {
-		return (index) -> {
-		};
+	public Looper withMaxAttempts(int size) {
+		withMaxAttemptsAllowed(size);
+		return this;
 	}
 
-	private static Function<Integer, Boolean> returnFalse() {
-		return (d) -> {
-			return false;
-		};
-	}
-
-	public void loop(Supplier<Exception> action) {
-		Consumer<Integer> function = (index) -> action.get();
-		loop(function, returnFalse());
-	}
-
-	/**
-	 * Performs action until test returns true.
-	 *
-	 * <p>
-	 * This is a re-implementation of the while loop mechanism. Probably not as
-	 * good as the actual while loop but it was fun to do.</p>
-	 *
-	 * <pre>
-	 * Looper looper = new Looper();
-	 * final int intendedAttempts = 10;
-	 * looper.loop(
-	 * () -&gt; {
-	 *					// do your processing here
-	 *
-	 *					// return null as required by Java
-	 *					return null;
-	 *				},
-	 *				() -&gt; {
-	 *					// Check for termination conditions here
-	 *					return trueIfTaskCompletedOtherwiseFalse();
-	 *				}
-	 *		);
-	 * </pre>
-	 *
-	 * @param action the action to perform with a loop
-	 * @param test the test to check, if TRUE the loop will be terminated, if
-	 * FALSE the loop will continue
-	 */
-	public void loop(Supplier<Exception> action, Supplier<Boolean> test) {
-		Consumer<Integer> function = (index) -> action.get();
-		Function<Integer, Boolean> testFunction = (index) -> test.get();
-		loop(function, testFunction);
+	public Looper withInfiniteLoopsPermitted() {
+		currentState.setInfiniteLoopPermitted();
+		return this;
 	}
 
 	/**
@@ -219,7 +227,7 @@ public class Looper implements Serializable {
 	 *
 	 * @param action the action to perform with a loop
 	 */
-	public void loop(Consumer<Integer> action) {
+	public void loop(Consumer<LoopVariable> action) {
 		loop(action, returnFalse());
 	}
 
@@ -232,33 +240,6 @@ public class Looper implements Serializable {
 	 *
 	 * <pre>
 	 * Looper looper = new Looper();
-	 * final int intendedAttempts = 10;
-	 * looper.loop(
-	 * () -&gt; {
-	 *					// do your processing here
-	 *
-	 *					// return null as required by Java
-	 *					return null;
-	 *				}
-	 *		);
-	 * </pre>
-	 *
-	 * @param action the action to perform with a loop
-	 * @return
-	 */
-	public Exception loopWithExceptionHandling(Function<Integer, Exception> action) {
-		return loopWithExceptionHandling(action, returnFalse());
-	}
-
-	/**
-	 * Performs action until test returns true.
-	 *
-	 * <p>
-	 * This is a re-implementation of the while loop mechanism. Probably not as
-	 * good as the actual while loop but it was fun to do.</p>
-	 *
-	 * <pre>
-	 * Looper looper = new Looper();
 	 * looper.loop(
 	 * (index) -&gt; {
 	 *					// do your processing here
@@ -277,40 +258,8 @@ public class Looper implements Serializable {
 	 * @param test the test to check, if TRUE the loop will be terminated, if
 	 * FALSE the loop will continue
 	 */
-	public void loop(Consumer<Integer> action, Function<Integer, Boolean> test) {
-		loop(action, test, doNothingOnCompletion(), doNothingOnCompletion());
-	}
-
-	/**
-	 * Performs action until test returns true.
-	 *
-	 * <p>
-	 * This is a re-implementation of the while loop mechanism. Probably not as
-	 * good as the actual while loop but it was fun to do.</p>
-	 *
-	 * <pre>
-	 * Looper looper = new Looper();
-	 * looper.loop(
-	 * (index) -&gt; {
-	 *					// do your processing here
-	 *
-	 *					// return null as required by Java
-	 *					return null;
-	 *				},
-	 *				(index) -&gt; {
-	 *					// Check for termination conditions here
-	 *					return trueIfTaskCompletedOtherwiseFalse();
-	 *				}
-	 *		);
-	 * </pre>
-	 *
-	 * @param action the action to perform with a loop
-	 * @param test the test to check, if TRUE the loop will be terminated, if
-	 * FALSE the loop will continue
-	 * @return
-	 */
-	public Exception loopWithExceptionHandling(Function<Integer, Exception> action, Function<Integer, Boolean> test) {
-		return loopWithExceptionHandling(action, test, doNothingOnCompletion(), doNothingOnCompletion());
+	public void loop(Consumer<LoopVariable> action, Function<LoopVariable, Boolean> test) {
+		loop(action, test, doNothing(), doNothing());
 	}
 
 	/**
@@ -345,7 +294,7 @@ public class Looper implements Serializable {
 	 * FALSE the loop will continue
 	 * @param completion the action to perform immediately after the loop
 	 */
-	public void loop(Consumer<Integer> action, Function<Integer, Boolean> test, Consumer<Integer> completion) {
+	public void loop(Consumer<LoopVariable> action, Function<LoopVariable, Boolean> test, Consumer<LoopVariable> completion) {
 		loop(action, test, completion, completion);
 	}
 
@@ -393,158 +342,126 @@ public class Looper implements Serializable {
 	 * @param unsuccessfulCompletion the action to perform immediately after the
 	 * loop if the test fails after completion
 	 */
-	public void loop(Consumer<Integer> action, Function<Integer, Boolean> test, Consumer<Integer> successfulCompletion, Consumer<Integer> unsuccessfulCompletion) {
-		loopWithExceptionHandling(
-				(Integer index) -> {
-					action.accept(index);
-					return null;
-				},
-				test,
-				successfulCompletion,
-				unsuccessfulCompletion
-		);
+	public void loop(Consumer<LoopVariable> action, Function<LoopVariable, Boolean> test, Consumer<LoopVariable> successfulCompletion, Consumer<LoopVariable> unsuccessfulCompletion) {
+		this.withAction(action)
+				.withTest(test)
+				.withSomeTestsSuccessfulAction(successfulCompletion)
+				.withAllTestsFailedAction(unsuccessfulCompletion)
+				.loop();
 	}
 
-	/**
-	 * Performs action until test returns true.
-	 *
-	 * <p>
-	 * This is a re-implementation of the while loop mechanism. Probably not as
-	 * good as the actual while loop but it was fun to do.</p>
-	 *
-	 * <p>
-	 * This method is particularly good for re-attempting operations that failed
-	 * but may have been affected by transient issues (network packet loss, broken
-	 * database, etc).</p>
-	 *
-	 * <pre>
-	 * Looper looper = new Looper();
-	 * looper.loop(
-	 * (index) -&gt; {
-	 *					// do your processing here
-	 *
-	 *					// return null as required by Java
-	 *					return null;
-	 *				},
-	 *				(index) -&gt; {
-	 *					// Check for termination conditions here
-	 *					return trueIfTaskCompletedOtherwiseFalse();
-	 *				},
-	 *				(index) -&gt; {
-	 *					// perform any post successful loop operations here
-	 *					System.out.println("Completed loop successfully after "+attempts()+" attempts");
-	 *				}
-	 *				(index) -&gt; {
-	 *					// perform any post failed loop operations here
-	 *					System.out.println("Completed loop without success after "+attempts()+" attempts");
-	 *				}
-	 *		);
-	 * </pre>
-	 *
-	 * @param action the action to perform with a loop
-	 * @param test the test to check, if TRUE the loop will be terminated, if
-	 * FALSE the loop will continue
-	 * @param successfulCompletion the action to perform immediately after the
-	 * loop if the test is true after completion
-	 * @param unsuccessfulCompletion the action to perform immediately after the
-	 * loop if the test fails after completion
-	 * @return the exception returned from the action function
-	 */
-	public Exception loopWithExceptionHandling(Function<Integer, Exception> action, Function<Integer, Boolean> test, Consumer<Integer> successfulCompletion, Consumer<Integer> unsuccessfulCompletion) {
-		setAction(action);
-		setTest(test);
-		setSuccessfulCompletionAction(successfulCompletion);
-		setUnsuccessfulCompletionAction(unsuccessfulCompletion);
+	public void loop() {
 		Boolean testSuccessful = false;
-		state.startTimer();
+		currentState.setStartTime();
+		currentState.setEndTime(); // sets the end time to avoid null values
 		while (isNeeded()) {
-			state.attempt();
-			Exception exc = getAction().apply(getSuccessfulLoops());
-			setException(exc);
-			if (hasException()) {
-				state.stopTimer();
-				return getException();
-			}
-			testSuccessful = getTest().apply(getSuccessfulLoops());
+			currentState.attempt();
+			action.accept(currentState.copy());
+			testSuccessful = test.apply(currentState.copy());
+			currentState.addTestResult(testSuccessful);
 			if (testSuccessful) {
-				state.done();
+				if (stopOnSuccess) {
+					currentState.done();
+				}
+				if (successfulTestAction != null) {
+					successfulTestAction.accept(currentState.copy());
+				}
+			} else {
+				if (stopOnFailure) {
+					currentState.done();
+				}
+				if (failedTestAction != null) {
+					failedTestAction.accept(currentState.copy());
+				}
 			}
-			increaseIndex();
+			incrementIndex();
 		}
-		if (testSuccessful) {
-			getSuccessfulCompletionAction().accept(getSuccessfulLoops());
-		} else {
-			getUnsuccessfulCompletionAction().accept(getSuccessfulLoops());
+		currentState.setEndTime();
+		if (currentState.isAllTestsSuccessful() && (allTestsSuccessfulAction != null)) {
+			allTestsSuccessfulAction.accept(currentState.copy());
 		}
-		state.stopTimer();
-		return null;
+		if (currentState.isAllTestsFailed() && (allTestsFailedAction != null)) {
+			allTestsFailedAction.accept(currentState.copy());
+		}
+		if (currentState.isSomeTestsSuccessful() && (someTestsSuccessfulAction != null)) {
+			someTestsSuccessfulAction.accept(currentState.copy());
+		}
+		if (currentState.isSomeTestsFailed() && (someTestsFailedAction != null)) {
+			someTestsFailedAction.accept(currentState.copy());
+		}
 	}
 
 	public int getSuccessfulLoops() {
-		return state.getSuccessfulLoops();
+		return currentState.getIndex();
 	}
 
-	private void increaseIndex() {
-		state.incrementSuccessLoops();
+	private void incrementIndex() {
+		currentState.incrementIndex();
 	}
 
-	public boolean hasException() {
-		return exception != null;
-	}
-
-	public Exception getException() {
-		return exception;
-	}
-
-	public void setException(Exception exc) {
-		exception = exc;
-	}
-
-	private void setAction(Function<Integer, Exception> action) {
+	public Looper withAction(Consumer<LoopVariable> action) {
 		this.action = action;
+		return this;
 	}
 
-	private void setTest(Function<Integer, Boolean> test) {
+	public Looper withSuccessfulTestAction(Consumer<LoopVariable> action) {
+		this.successfulTestAction = action;
+		return this;
+	}
+
+	public Looper withFailedTestAction(Consumer<LoopVariable> action) {
+		this.failedTestAction = action;
+		return this;
+	}
+
+	public Looper withStopOnSuccess(boolean stopOnSuccess) {
+		this.stopOnSuccess = stopOnSuccess;
+		return this;
+	}
+
+	public Looper withStopOnFailure(boolean stopOnFailure) {
+		this.stopOnFailure = stopOnFailure;
+		return this;
+	}
+
+	public Looper withTest(Function<LoopVariable, Boolean> test) {
 		this.test = test;
+		return this;
 	}
 
-	private void setSuccessfulCompletionAction(Consumer<Integer> successfulCompletion) {
-		this.successfulCompletionAction = successfulCompletion;
+	public Looper withAllTestsSuccessfulAction(Consumer<LoopVariable> action) {
+		this.allTestsSuccessfulAction = action;
+		return this;
 	}
 
-	private void setUnsuccessfulCompletionAction(Consumer<Integer> unsuccessfulCompletion) {
-		this.unsuccessfulCompletionAction = unsuccessfulCompletion;
+	public Looper withSomeTestsSuccessfulAction(Consumer<LoopVariable> action) {
+		this.someTestsSuccessfulAction = action;
+		return this;
 	}
 
-	public Function<Integer, Exception> getAction() {
-		return action;
+	public Looper withAllTestsFailedAction(Consumer<LoopVariable> action) {
+		this.allTestsFailedAction = action;
+		return this;
 	}
 
-	public Function<Integer, Boolean> getTest() {
-		return test;
-	}
-
-	public Consumer<Integer> getSuccessfulCompletionAction() {
-		return successfulCompletionAction;
-	}
-
-	private Consumer<Integer> getUnsuccessfulCompletionAction() {
-		return unsuccessfulCompletionAction;
+	public Looper withSomeTestsFailedAction(Consumer<LoopVariable> action) {
+		this.someTestsFailedAction = action;
+		return this;
 	}
 
 	public Boolean isLimited() {
-		return state.isLimited();
+		return currentState.isLimited();
 	}
 
 	public Boolean isInfiniteLoopsPermitted() {
-		return !state.isLimited();
+		return !currentState.isLimited();
 	}
 
 	public Instant getStartTime() {
-		return state.getStartTime();
+		return currentState.getStartTime();
 	}
 
 	public Instant getEndTime() {
-		return state.getEndTime();
+		return currentState.getEndTime();
 	}
 }
