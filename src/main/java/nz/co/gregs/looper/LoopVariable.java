@@ -157,6 +157,20 @@ public class LoopVariable implements Serializable {
 	}
 
 	/**
+	 * Decides whether the LoopVariable has been successful and is no longer
+	 * needed.
+	 * <p>
+	 * This method is used to indicate that a loop, that takes multiple attempts to
+	 * complete one task, has successfully completed that task.</p>
+	 *
+	 * @param done the value to set done to, if the expression is TRUE then the
+	 * loo is done and no longer needed.
+	 */
+	public void done(boolean done) {
+		needed = done;
+	}
+
+	/**
 	 * Indicates that an attempt has been started.
 	 *
 	 * <p>
