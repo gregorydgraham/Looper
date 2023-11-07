@@ -167,7 +167,7 @@ public class LoopVariable implements Serializable {
 	 * loo is done and no longer needed.
 	 */
 	public void done(boolean done) {
-		needed = done;
+		needed = !done;
 	}
 
 	/**
