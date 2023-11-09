@@ -46,12 +46,10 @@ public class LoopVariable implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
-	private boolean needed = true;
+	private boolean done = false;
 	private int maxAttemptsAllowed = 1000;
 	private boolean limitMaxAttempts = true;
 	private int tries = 0;
-	private Instant startTime = Instant.now();
-	private Instant endTime = null;
 	private int index = 0;
 	private boolean allTestsSuccessful = true;
 	private boolean someTestSuccessful = false;
@@ -60,15 +58,17 @@ public class LoopVariable implements Serializable {
 	ArrayList<Boolean> testResults = new ArrayList<Boolean>(0);
 	HashMap<Integer, Boolean> successfulTests = new HashMap<Integer, Boolean>(0);
 	HashMap<Integer, Boolean> failedTests = new HashMap<Integer, Boolean>(0);
+	private StopWatch stopWatch = StopWatch.unstarted();
+	private boolean failed = false;
 
-	LoopVariable copy() {
+	protected LoopVariable copy() {
 		LoopVariable result = new LoopVariable();
-		result.needed = needed;
+		result.done = done;
+		result.failed = failed;
 		result.maxAttemptsAllowed = maxAttemptsAllowed;
 		result.limitMaxAttempts = limitMaxAttempts;
 		result.tries = tries;
-		result.startTime = startTime;
-		result.endTime = endTime;
+		result.stopWatch = stopWatch.copy();
 		result.index = index;
 		result.allTestsSuccessful = allTestsSuccessful;
 		result.someTestSuccessful = someTestSuccessful;
@@ -102,26 +102,23 @@ public class LoopVariable implements Serializable {
 	}
 
 	/**
-	 * Checks the whether the loop is still needed (that is {@link #done()} has
-	 * not been called) and if the loop has exceeded the maximum attempts (if a
-	 * max is defined).
+	 * Checks the whether the loop is still done (that is {@link #done()} has not
+	 * been called) and if the loop has exceeded the maximum attempts (if a max is
+	 * defined).
 	 *
-	 * @return true if the loop is still needed.
+	 * @return true if the loop is still done.
 	 */
 	public boolean isNeeded() {
-		if (limitMaxAttempts) {
-			return needed && attempts() + 1 <= maxAttemptsAllowed;
-		} else {
-			return needed;
-		}
+		final boolean needed = !done && !failed && !tooManyAttempts() && !stopWatch.timedOut();
+		return needed;
 	}
 
 	/**
-	 * Checks the whether the loop is still needed (that is {@link #done()} has
-	 * not been called) and if the loop has exceeded the maximum attempts (if a
-	 * max is defined).
+	 * Checks the whether the loop is still done (that is {@link #done()} has not
+	 * been called) and if the loop has exceeded the maximum attempts (if a max is
+	 * defined).
 	 *
-	 * @return true if the loop is no longer needed.
+	 * @return true if the loop is no longer done.
 	 */
 	public boolean isNotNeeded() {
 		return !isNeeded();
@@ -130,7 +127,7 @@ public class LoopVariable implements Serializable {
 	/**
 	 * Synonym for {@link #isNotNeeded() }.
 	 *
-	 * @return true if the loop is no longer needed.
+	 * @return true if the loop is no longer done.
 	 */
 	public boolean hasHappened() {
 		return isNotNeeded();
@@ -139,7 +136,7 @@ public class LoopVariable implements Serializable {
 	/**
 	 * Synonym for {@link #isNeeded() }.
 	 *
-	 * @return true if the loop is still needed.
+	 * @return true if the loop is still done.
 	 */
 	public boolean hasNotHappened() {
 		return isNeeded();
@@ -153,21 +150,21 @@ public class LoopVariable implements Serializable {
 	 * complete one task, has successfully completed that task.</p>
 	 */
 	public void done() {
-		needed = false;
+		done(true);
 	}
 
 	/**
 	 * Decides whether the LoopVariable has been successful and is no longer
 	 * needed.
 	 * <p>
-	 * This method is used to indicate that a loop, that takes multiple attempts to
-	 * complete one task, has successfully completed that task.</p>
+	 * This method is used to indicate that a loop, that takes multiple attempts
+	 * to complete one task, has successfully completed that task.</p>
 	 *
 	 * @param done the value to set done to, if the expression is TRUE then the
-	 * loo is done and no longer needed.
+	 * loo is done and no longer done.
 	 */
 	public void done(boolean done) {
-		needed = !done;
+		this.done = done;
 	}
 
 	/**
@@ -180,9 +177,17 @@ public class LoopVariable implements Serializable {
 	 * {@link #setMaxAttemptsAllowed(int) maximum attempts} if a maximum has been
 	 * set.</p>
 	 *
+	 * @return
 	 */
-	public void attempt() {
-		tries++;
+	public boolean attempt() {
+		stopWatch.startIfNeeded();
+		final boolean needed = isNeeded(); // check if it's allowed
+		if (needed) {
+			tries++; // increment the counter as we will make an attempt
+		} else {
+			stopWatch.end();
+		}
+		return needed;
 	}
 
 	/**
@@ -243,7 +248,7 @@ public class LoopVariable implements Serializable {
 	 * @return the time that the loop was initiated
 	 */
 	public Instant getStartTime() {
-		return startTime;
+		return stopWatch.startTime();
 	}
 
 	/**
@@ -264,9 +269,8 @@ public class LoopVariable implements Serializable {
 	 */
 	public void reset() {
 		tries = 0;
-		needed = true;
-		startTime = Instant.now();
-		endTime = null;
+		done = false;
+		stopWatch.blank();
 	}
 
 	/**
@@ -288,14 +292,6 @@ public class LoopVariable implements Serializable {
 	 */
 	protected int maxAttemptsAllowed() {
 		return maxAttemptsAllowed;
-	}
-
-	protected void setStartTime() {
-		startTime = Instant.now();
-	}
-
-	protected void setEndTime() {
-		endTime = Instant.now();
 	}
 
 	/**
@@ -326,7 +322,7 @@ public class LoopVariable implements Serializable {
 	 * @return and instant recorded at the end of the loop
 	 */
 	public Instant getEndTime() {
-		return endTime;
+		return stopWatch.endTime();
 	}
 
 	void addTestResult(Boolean testSuccessful) {
@@ -368,5 +364,41 @@ public class LoopVariable implements Serializable {
 	 */
 	public boolean isSomeTestsFailed() {
 		return someTestFailed;
+	}
+
+	public void stopTimer() {
+		stopWatch.end();
+	}
+
+	private boolean tooManyAttempts() {
+		if (limitMaxAttempts) {
+			return attempts() >= maxAttemptsAllowed;
+		} else {
+			return false;
+		}
+	}
+
+	public void failed() {
+		this.failed = true;
+	}
+
+	public void setTimeout(Duration limit) {
+		stopWatch.setTimeout(limit);
+	}
+
+	public void setTimeout(Instant limit) {
+		stopWatch.setTimeout(limit);
+	}
+
+	public StopWatch getStopWatch() {
+		return stopWatch;
+	}
+	
+	public boolean hasFailed(){
+		return failed;
+	}
+	
+	public boolean hasSucceeded(){
+		return done;
 	}
 }

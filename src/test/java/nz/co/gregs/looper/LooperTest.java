@@ -54,7 +54,7 @@ public class LooperTest {
 		assertThat(looper.isInfiniteLoopsPermitted(), is(true));
 		assertThat(looper.isLimited(), is(false));
 		assertThat(looper.getEndTime(), nullValue());
-		assertThat(looper.getStartTime(), greaterThan(Instant.now().minusSeconds(10)));
+		assertThat(looper.getStartTime(), nullValue());
 	}
 
 	@Test
@@ -65,7 +65,7 @@ public class LooperTest {
 		assertThat(looper.isInfiniteLoopsPermitted(), is(false));
 		assertThat(looper.isLimited(), is(true));
 		assertThat(looper.getEndTime(), nullValue());
-		assertThat(looper.getStartTime(), greaterThan(Instant.now().minusSeconds(10)));
+		assertThat(looper.getStartTime(), nullValue());
 	}
 
 	@Test
@@ -76,7 +76,7 @@ public class LooperTest {
 		assertThat(looper.isInfiniteLoopsPermitted(), is(true));
 		assertThat(looper.isLimited(), is(false));
 		assertThat(looper.getEndTime(), nullValue());
-		assertThat(looper.getStartTime(), greaterThan(Instant.now().minusSeconds(10)));
+		assertThat(looper.getStartTime(), nullValue());
 	}
 
 	@Test
@@ -87,7 +87,7 @@ public class LooperTest {
 		assertThat(looper.isInfiniteLoopsPermitted(), is(false));
 		assertThat(looper.isLimited(), is(true));
 		assertThat(looper.getEndTime(), nullValue());
-		assertThat(looper.getStartTime(), greaterThan(Instant.now().minusSeconds(10)));
+		assertThat(looper.getStartTime(), nullValue());
 	}
 
 	@Test
@@ -122,7 +122,8 @@ public class LooperTest {
 		Looper looper = Looper.loopUntilSuccessOrLimit();
 		assertThat(looper.attempts(), is(0));
 
-		looper.loop((index) -> {});
+		looper.loop((index) -> {
+		});
 		assertThat(looper.attempts(), is(1000));
 	}
 
@@ -132,7 +133,8 @@ public class LooperTest {
 		// Create the Looper
 		Looper looper = Looper.loopUntilSuccessOrLimit(intendedAttempts);
 		// Create the method to loop over
-		final Consumer<LoopVariable> action = (state) -> {};
+		final Consumer<LoopVariable> action = (state) -> {
+		};
 		// loop over the action
 		looper.loop(action);
 		assertThat(looper.attempts(), is(intendedAttempts));
@@ -145,8 +147,11 @@ public class LooperTest {
 				.loopUntilSuccessOrLimit(intendedAttempts * 2)
 				.withStopOnSuccess(true);
 		looper.loop(
-				(state) -> {},
-				(state) -> {return state.attempts() >= intendedAttempts;}
+				(state) -> {
+				},
+				(state) -> {
+					return state.attempts() >= intendedAttempts;
+				}
 		);
 		assertThat(looper.attempts(), is(intendedAttempts));
 	}
@@ -175,13 +180,14 @@ public class LooperTest {
 				(state) -> {
 				},
 				(state) -> {
-					return state.attempts() >= intendedAttempts;
+					return state.attempts() == intendedAttempts;
 				}
 		);
 		assertThat(looper.attempts(), is(intendedAttempts));
 		looper.loop(
 				(state) -> {
 					System.out.println("YOU SHOULD NOT SEE THIS");
+					assertThat("ALREADY EXHAUSTED THE ATTEMPTS", false);
 				},
 				(state) -> {
 					return looper.attempts() >= intendedAttempts;
@@ -194,7 +200,8 @@ public class LooperTest {
 		final int intendedAttempts = 10;
 		Looper looper = Looper.loopUntilSuccessOrLimit(intendedAttempts * 2);
 		looper.loop(
-				(state) -> {				},
+				(state) -> {
+				},
 				(state) -> {
 					return looper.attempts() >= intendedAttempts;
 				}
@@ -215,7 +222,47 @@ public class LooperTest {
 	@Test
 	public void testLoopStoppedByExceedingMaxAttemptsAllowed() {
 		Looper looper = Looper.loopUntilSuccessOrLimit(20);
-		looper.loop((state) -> {	});
+		looper.loop((state) -> {
+		});
 		assertThat(looper.attempts(), is(20));
+	}
+
+	@Test
+	public void testLoopStoppedByExceedingTimeoutInstant() {
+		final int millis = 50;
+		Looper looper = Looper.loopUntilSuccessOrLimit(Instant.now().plusMillis(millis));
+		looper.loop((state) -> {
+//			try {
+//				Thread.sleep(10);
+//			} catch (InterruptedException ex) {
+//				Logger.getLogger(LooperTest.class.getName()).log(Level.SEVERE, null, ex);
+//			}
+		});
+		final Instant now = Instant.now();
+		final StopWatch stopWatch = looper.getLoopVariable().getStopWatch();
+		final Instant timeout = stopWatch.getTimeout();
+		assertThat(now, is(greaterThanOrEqualTo(timeout)));
+		assertThat(looper.getEndTime(), greaterThanOrEqualTo(timeout));
+		assertThat(looper.getLoopVariable().hasSucceeded(), is(false));
+		assertThat(looper.getLoopVariable().hasFailed(), is(false));
+		assertThat(looper.getLoopVariable().attempts(), is(not(1000)));
+		assertThat(looper.getLoopVariable().getStopWatch().timedOut(), is(true));
+	}
+
+	@Test
+	public void testLoopStoppedByExceedingTimeoutDuration() {
+		final int millis = 50;
+		Looper looper = Looper.loopUntilSuccessOrLimit(Duration.ofMillis(millis));
+		looper.loop((state) -> {
+		});
+		final Instant now = Instant.now();
+		final StopWatch stopWatch = looper.getLoopVariable().getStopWatch();
+		final Instant timeout = stopWatch.getTimeout();
+		assertThat(now, is(greaterThanOrEqualTo(timeout)));
+		assertThat(looper.getEndTime(), greaterThanOrEqualTo(timeout));
+		assertThat(looper.getLoopVariable().hasSucceeded(), is(false));
+		assertThat(looper.getLoopVariable().hasFailed(), is(false));
+		assertThat(looper.getLoopVariable().attempts(), is(not(1000)));
+		assertThat(looper.getLoopVariable().getStopWatch().timedOut(), is(true));
 	}
 }

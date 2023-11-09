@@ -95,6 +95,20 @@ public class Looper implements Serializable {
 		return result;
 	}
 
+	public static Looper loopUntilSuccessOrLimit(Duration limit) {
+		Looper result = loopUntilSuccess()
+				.withInfiniteLoopsPermitted()
+				.withTimeout(limit);
+		return result;
+	}
+
+	public static Looper loopUntilSuccessOrLimit(Instant limit) {
+		Looper result = loopUntilSuccess()
+				.withInfiniteLoopsPermitted()
+				.withTimeout(limit);
+		return result;
+	}
+
 	public static Looper loopUntilFailure() {
 		Looper newLoop
 				= Looper.factory()
@@ -135,17 +149,16 @@ public class Looper implements Serializable {
 		currentState.reset();
 	}
 
-	/**
-	 * Checks the whether the loop is still needed (that is {@link #done()} has
-	 * not been called) and if the loop has exceeded the maximum attempts (if a
-	 * max is defined).
-	 *
-	 * @return true if the loop is still needed.
-	 */
-	private boolean isNeeded() {
-		return currentState.isNeeded();
-	}
-
+//	/**
+//	 * Checks the whether the loop is still needed (that is {@link #done()} has
+//	 * not been called) and if the loop has exceeded the maximum attempts (if a
+//	 * max is defined).
+//	 *
+//	 * @return true if the loop is still needed.
+//	 */
+//	private boolean isNeeded() {
+//		return currentState.isNeeded();
+//	}
 	/**
 	 * The number of loops started.
 	 *
@@ -200,6 +213,19 @@ public class Looper implements Serializable {
 		return this;
 	}
 
+	/**
+	 * Removes the default limit from the LoopVariable.
+	 *
+	 * <p>
+	 * By default the loop will terminate after 1000 attempts. Use this method to
+	 * remove the limit and permit infinite loops.</p>
+	 *
+	 * <p>
+	 * Alternatively you can seta higher, or lower, limit with {@link #withMaxAttemptsAllowed(int)
+	 * }.</p>
+	 *
+	 * @return this object with the configuration changed
+	 */
 	public Looper withInfiniteLoopsPermitted() {
 		currentState.setInfiniteLoopPermitted();
 		return this;
@@ -351,11 +377,9 @@ public class Looper implements Serializable {
 	}
 
 	public void loop() {
-		Boolean testSuccessful = false;
-		currentState.setStartTime();
-		currentState.setEndTime(); // sets the end time to avoid null values
-		while (isNeeded()) {
-			currentState.attempt();
+		Boolean testSuccessful;
+		while (currentState.attempt()) {
+//			currentState.attempt();
 			action.accept(currentState.copy());
 			testSuccessful = test.apply(currentState.copy());
 			currentState.addTestResult(testSuccessful);
@@ -368,7 +392,7 @@ public class Looper implements Serializable {
 				}
 			} else {
 				if (stopOnFailure) {
-					currentState.done();
+					currentState.failed();
 				}
 				if (failedTestAction != null) {
 					failedTestAction.accept(currentState.copy());
@@ -376,7 +400,7 @@ public class Looper implements Serializable {
 			}
 			incrementIndex();
 		}
-		currentState.setEndTime();
+		currentState.stopTimer();
 		if (currentState.isAllTestsSuccessful() && (allTestsSuccessfulAction != null)) {
 			allTestsSuccessfulAction.accept(currentState.copy());
 		}
@@ -463,5 +487,19 @@ public class Looper implements Serializable {
 
 	public Instant getEndTime() {
 		return currentState.getEndTime();
+	}
+
+	public Looper withTimeout(Duration limit) {
+		this.currentState.setTimeout(limit);
+		return this;
+	}
+
+	public Looper withTimeout(Instant limit) {
+		this.currentState.setTimeout(limit);
+		return this;
+	}
+
+	public LoopVariable getLoopVariable() {
+		return this.currentState;
 	}
 }
