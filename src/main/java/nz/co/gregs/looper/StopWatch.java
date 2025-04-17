@@ -90,6 +90,11 @@ public class StopWatch implements Cloneable {
 		return splitTime();
 	}
 
+	/**
+	 * The duration in milliseconds.
+	 * 
+	 * @return the elapsed time in milliseconds
+	 */
 	public long duration() {
 		end();
 		long dur = endTime.toEpochMilli() - startTime.toEpochMilli();
