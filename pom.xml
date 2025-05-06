@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>nz.co.gregs</groupId>
   <artifactId>looper</artifactId>
-  <version>1.3-SNAPSHOT</version>
+  <version>1.3</version>
   <packaging>jar</packaging>
   <name>Looper</name>
   <description>Functional Looping: for no good reason</description>
@@ -33,7 +33,7 @@
     <url>https://github.com/gregorydgraham/Looper</url>
     <connection>scm:git:https://github.com/gregorydgraham/Looper</connection>
     <developerConnection>scm:git:https://github.com/gregorydgraham/Looper</developerConnection>
-    <tag>HEAD</tag>
+    <tag>looper-1.3</tag>
   </scm>
 	
   <dependencies>
