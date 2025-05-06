@@ -200,6 +200,17 @@ public class LoopVariable implements Serializable {
 	}
 
 	/**
+	 * The index of the loop.
+   * 
+   * <p>Intended for use with arrays this is the same as attempts()-1.</p>
+	 *
+	 * @return the number of attempts started.
+	 */
+	public int index() {
+		return attempts()-1;
+	}
+
+	/**
 	 * Sets the maximum attempts allowed for this loop variable.
 	 *
 	 * <p>
